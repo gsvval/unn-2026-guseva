@@ -1,0 +1,66 @@
+
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Check formatting
+        run: uv run ruff format --check .
+
+      - name: Check lint
+        run: uv run ruff check .
+
+      - name: Check types
+        run: uv run mypy bot
+
+      - name: Run tests
+        run: uv run python -m unittest discover -s tests -v
+
+      - name: Build Docker image
+        run: docker build -t unn-2026-guseva:latest .
+
+  publish:
+    if: github.event_name == 'push'
+    needs: check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/gsvval/unn-2026-guseva:latest
